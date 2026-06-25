@@ -60,6 +60,19 @@ docker run --rm -v $REPO:/workspace -w /workspace octcube-dev python -m forecast
 - **MedSAM2 教師需額外裝**：`pip install --no-deps sam2 && pip install hydra-core omegaconf iopath`（已記在 docker/requirements-docker.txt）。
 - 容器**無 flash-attn / CPU**：OCTCube 用非 flash 變體（已寫好 key remap）；L40 裝 flash-attn 會更快。
 
+## 5.5 資料 pipeline（raw .pdb → h5 → stage0，forecast_c 的輸入來源）
+```
+pdb_to_h5/   Heidelberg HEYEX .pdb → h5 轉檔（heyex_pipeline/：解析 + hdf5_writer + layers(ILM/RPE)
+             + qc + fovea + laterality + manifest）。CGMH raw .pat/.pdb → 我們的 study .h5。
+             用法見 pdb_to_h5/README.md；依賴 pdb_to_h5/requirements.txt（eyepy 等，≠ octcube-dev）。
+stage0/      h5 後處理：m1 建索引 → m2 transform → m3 geometry → m4 QC → m5 mean/std →
+             m6 split(病人層級) → m7/m7b pack（M7b = per-eye 層 npz）。產 manifest.parquet（gitignore）。
+scripts/     h5 檢視工具（inspect_h5 / view_h5 / verify_sample…）。
+docs/HDF5_SCHEMA.md  h5 欄位規格。
+```
+> ⚠️ pdb 解析依賴（eyepy/topcon adapter）和訓練環境不同 → 轉檔可在另一個 env 跑；轉好的 h5 餵 forecast_c。
+> 流程：**NAS raw .pdb →(pdb_to_h5)→ h5_output/ →(stage0)→ manifest/M7b → forecast_c（census/訓練）**。
+
 ## 6. 新機器 setup 步驟（從零）
 1. `git clone <this repo>` → 進 repo 根。
 2. **OCTCube 官方碼**：另 clone `OCTCubeM`（含 `OCTCube/models_vit_st_joint.py`）放到 repo 根的 `OCTCubeM-main/`（`forecast_c/model/encoder.py` 預設 `repo_dir="OCTCubeM-main/OCTCube"`）。

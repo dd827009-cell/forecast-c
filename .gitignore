@@ -18,6 +18,10 @@ data/raw/
 *.pdf
 *.docx
 
+# stage0 資料產物（索引/manifest/統計，由 pipeline 重生，不進 git）
+*.parquet
+stage0/norm_stats.json
+
 # census / 訓練輸出
 census_out/
 results/

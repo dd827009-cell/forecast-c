@@ -1,0 +1,8 @@
+# stage0 資料準備 pipeline 相依 (Python 3.10+, 純 CPU, 不需 torch)
+numpy
+opencv-python
+h5py
+pandas
+pyarrow
+tqdm
+# matplotlib  # 選用: 僅 m2_transform.py / m3_geometry.py 的 _verify 視覺化用

@@ -1,0 +1,6 @@
+# pdb_to_h5 轉換器相依 (Python 3.10+)
+numpy
+h5py
+pandas
+simplejson
+iopath
