@@ -1,9 +1,5 @@
 # forecast-c
 
-設計 C：**治療條件化 OCT latent 預測** → 厚度 + 積水體積變化（MICCAI/MIA）。
-
-凍結 OCT 表徵上，給「現在 + 治療 + Δt + 病人資訊」預測未來 latent，解碼成厚度µm + 積水。
-用 JEPA「方法」（空間+時間），非 V-JEPA「模型」。
 
 ## 快速上手
 1. 讀 **[CLAUDE.md](CLAUDE.md)**（完整交接：架構、現狀、環境、避坑、setup）。
