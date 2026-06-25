@@ -1,0 +1,36 @@
+# 權重 / 資料 / 官方碼（不進 git，見 CLAUDE.md §6/§9）
+ckpts/
+h5_output/
+OCTCubeM-main/
+data/raw/
+*.pth
+*.pt
+*.safetensors
+*.h5
+*.npz
+*.pdb
+*.edb
+*.sdb
+
+# 臨床 Excel / PDF（含 PII，絕不 commit）
+*.xlsx
+*.xls
+*.pdf
+*.docx
+
+# census / 訓練輸出
+census_out/
+results/
+res_data/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db

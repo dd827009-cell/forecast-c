@@ -1,0 +1,35 @@
+# OCTCube-M 本機開發/驗證環境相依
+# 注意: torch / torchvision 由 base image (pytorch/pytorch:*-cuda*) 提供, 這裡不要再裝, 以免蓋掉 CUDA build。
+# flash-attn 不列: smoke_test_load.py 已 stub, 模塊開發只用 dummy latent。
+
+# --- 核心 (stage1 dataloader / 官方 OCTCube 模型 forward) ---
+numpy
+einops
+timm                      # >=1.0.20 支援 DINOv3；forecast_c 教師 DINOv3/RETFound 都靠它
+# OCTCube custom_util.loggings 鏈需要 (smoke_test_load forward 用)
+simplejson
+iopath
+
+# --- forecast_c Phase 1a 第三教師 MedSAM2 = SAM2 Hiera image encoder ---
+# 安裝: pip install --no-deps sam2  (--no-deps 避免蓋掉 base image 的 torch)
+#   sam2                  # SAM2 模型碼 (image encoder)；需下列 hydra 鏈
+#   hydra-core
+#   omegaconf
+# (iopath 已在上面)。openpyxl: 讀治療 Excel 普查時才需。
+openpyxl
+
+# --- stage0 資料準備 pipeline ---
+opencv-python-headless   # headless: 不需 libGL, 純影像處理夠用
+h5py
+pandas
+pyarrow
+tqdm
+
+# --- 選用: m2/m3 的 _verify 視覺化 ---
+matplotlib
+
+# --- L40 / Colab / devel 映像才裝 (需 nvcc 編譯; runtime 映像沒 nvcc → 此處不放, 程式會 fallback) ---
+# Phase2 V2 時間軸 temporal_kind="mamba" 用官方 Mamba (已在 Colab GPU 驗證 temporal=MambaTemporal 跑通)
+# 安裝: pip install causal-conv1d mamba-ssm --no-build-isolation   (需 GPU runtime / nvcc)
+#   causal-conv1d
+#   mamba-ssm
