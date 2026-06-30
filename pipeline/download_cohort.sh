@@ -7,7 +7,7 @@
 set -euo pipefail
 
 LIST="$1"; REMOTE_BASE="$2"; OUT="$3"; HOST="$4"; USER="$5"; PDB_ROOT="$6"; CHARSET="${7:-big5}"
-LFTP_PRE="set ftp:charset $CHARSET; set file:charset utf-8; set net:connection-limit 4;"
+LFTP_PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset utf-8; set net:connection-limit 4;"
 mkdir -p "$OUT"
 : > "$OUT/_failures.txt"
 
