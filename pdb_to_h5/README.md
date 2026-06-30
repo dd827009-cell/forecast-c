@@ -14,8 +14,9 @@
 ## 相依
 Python 3.10+，安裝：
 ```bash
-pip install numpy h5py pandas simplejson iopath
+pip install numpy h5py pandas pyarrow simplejson iopath openpyxl
 ```
+（`pyarrow` 寫 manifest.parquet 必需；`openpyxl` 給 pipeline 的 cohort_list 讀治療 Excel。）
 
 ## 用法
 ```bash
