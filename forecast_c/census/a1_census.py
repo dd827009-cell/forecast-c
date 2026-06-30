@@ -281,9 +281,44 @@ def _dt_days(iso_times):
     return out
 
 
-def build_trajectories_from_h5(h5_dir, pilot=None):
-    """讀 h5_output（stage0 study 檔）→ list[trajectory]。依 longitudinal_key 分眼、按時間排序、每 visit 算 CST。
+def _visit_day(iso_str):
+    """ISO 時間字串 → 'YYYY-MM-DD'（同日判定用）；無法解析回 None。"""
+    s = str(iso_str or "")
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    return None
 
+
+def dedup_sameday(records):
+    """同一眼「同一天多次掃描」去重：同日只留 quality 最高那筆。
+
+    records: list[dict]，每筆需含 'day'(str|None) 與 'quality'(float)。
+    day=None（無時間戳、無法判定同日）的各自保留，不誤併。
+    回傳 (deduped_list, n_removed)。
+
+    ★ 這是「同日重掃」去重；跨天的回診全留（縱向資料）。完全重複的掃描在轉檔階段
+      已由 (病歷號,日時分秒,眼) 命名 + 冪等擋掉。未來 build_dataloader 實作時應 import
+      本函式沿用同一規則，避免訓練/普查不一致。
+    """
+    by_day, keep_unknown = {}, []
+    for r in records:
+        d = r.get("day")
+        if d is None:
+            keep_unknown.append(r)
+            continue
+        cur = by_day.get(d)
+        if cur is None or r.get("quality", float("-inf")) > cur.get("quality", float("-inf")):
+            by_day[d] = r
+    deduped = list(by_day.values()) + keep_unknown
+    return deduped, len(records) - len(deduped)
+
+
+def build_trajectories_from_h5(h5_dir, pilot=None, dedup_sameday_visits=True):
+    """讀 h5_output（stage0 study 檔）→ (list[trajectory], dedup_info)。
+
+    依 longitudinal_key=病歷號::眼 分組、按時間排序、每 visit 算 CST。
+    去重: 同一眼同一天多次掃描（同日重掃）→ 預設只留品質最高那筆；跨天回診全留（縱向資料）。
+    品質指標: image_quality_per_bscan 中位數（無則用 valid_ascan_mask 比例）。
     無治療 metadata（h5 不含）→ drugs 留空、is_naive=True（census 自動只跑軌跡/變乾部分）。
     """
     import glob
@@ -296,31 +331,52 @@ def build_trajectories_from_h5(h5_dir, pilot=None):
         with h5py.File(f, "r") as h:
             a = dict(h.attrs)
             ilm, rpe, valid = h["ilm_y"][:], h["rpe_bm_y"][:], h["valid_ascan_mask"][:]
+            if "image_quality_per_bscan" in h:
+                iq = h["image_quality_per_bscan"][:]
+                q = float(np.nanmedian(iq)) if np.isfinite(iq).any() else float(valid.mean())
+            else:
+                q = float(valid.mean())
         cst, _ = central_subfield_thickness(
             ilm, rpe, axial_um_per_px=_f(a.get("scale_axial_um_per_px"), DEFAULT_AXIAL_UM_PER_PX),
             lateral_mm_per_px=_f(a.get("scale_lateral_mm_per_px")),
             bscan_spacing_mm=_f(a.get("scale_bscan_spacing_mm")),
             ilm_valid=valid, rpe_valid=valid)
+        t = str(a.get("acquisition_time_utc", ""))
         key = str(a["longitudinal_key"])
         groups.setdefault(key, []).append(
-            (str(a.get("acquisition_time_utc", "")), cst,
-             str(a.get("laterality", "")), str(a.get("patient_id", ""))))
+            {"time": t, "day": _visit_day(t), "cst": cst, "quality": q,
+             "lat": str(a.get("laterality", "")), "pid": str(a.get("patient_id", ""))})
 
     keys = list(groups)[:pilot] if pilot else list(groups)
     trajectories = []
+    n_raw = n_removed = n_eyes_sameday = 0
     for key in keys:
-        visits = sorted(groups[key], key=lambda x: x[0])      # 按時間排序
+        recs = groups[key]
+        n_raw += len(recs)
+        if dedup_sameday_visits:
+            recs, n_rm = dedup_sameday(recs)
+            n_removed += n_rm
+            n_eyes_sameday += (n_rm > 0)
+        visits = sorted(recs, key=lambda x: x["time"])        # 按時間排序
         trajectories.append({
-            "longitudinal_key": key, "patient_id": visits[0][3], "eye": visits[0][2],
-            "split": "", "cst": [v[1] for v in visits], "dt_days": _dt_days([v[0] for v in visits]),
+            "longitudinal_key": key, "patient_id": visits[0]["pid"], "eye": visits[0]["lat"],
+            "split": "", "cst": [v["cst"] for v in visits],
+            "dt_days": _dt_days([v["time"] for v in visits]),
             "drugs": [], "is_naive": True})
-    return trajectories
+    dedup_info = {"enabled": dedup_sameday_visits, "n_raw_visits": n_raw,
+                  "n_after_dedup": n_raw - n_removed, "n_sameday_removed": n_removed,
+                  "n_eyes_with_sameday": int(n_eyes_sameday)}
+    return trajectories, dedup_info
 
 
 def render_markdown(c):
     """census dict → 人讀 census_report.md（含決策表）。"""
-    L = ["# A-1 普查報告\n", f"- 眼數: **{c['n_eyes']}**",
-         f"- 變乾眼: {c['recovery']['n_dry']}（變乾率 {c['recovery']['dry_rate']:.1%}）",
+    L = ["# A-1 普查報告\n", f"- 眼數: **{c['n_eyes']}**"]
+    if c.get("dedup", {}).get("enabled"):
+        d = c["dedup"]
+        L.append(f"- 同日重掃去重: 原始 {d['n_raw_visits']} 次掃描 → 去重後 **{d['n_after_dedup']}** 次 visit"
+                 f"（移除同日重複 {d['n_sameday_removed']} 筆；{d['n_eyes_with_sameday']} 眼有同日重掃，留品質最高那筆）")
+    L += [f"- 變乾眼: {c['recovery']['n_dry']}（變乾率 {c['recovery']['dry_rate']:.1%}）",
          f"- 軌跡長度: median={c['trajectory']['median_visits']}, "
          f"≥3 visit {c['trajectory']['frac_ge3_visits']:.1%}, max={c['trajectory']['max_visits']}",
          f"- 會變眼比例: {c['changing']['frac_changing']:.1%} "
@@ -386,6 +442,20 @@ def _self_test():
     c2 = compute_census([{"cst": [400, 350], "dt_days": [30], "drugs": [], "is_naive": True}])
     assert not c2["treatment"]["available"] and not c2["count_time"]["available"]
     print("  [OK] 無治療 metadata 分支正常降級")
+
+    # 同日重掃去重
+    assert _visit_day("2021-03-15T10:30:00") == "2021-03-15" and _visit_day("") is None
+    recs = [
+        {"day": "2021-03-15", "quality": 0.8, "time": "2021-03-15T10:00:00", "tag": "a"},
+        {"day": "2021-03-15", "quality": 0.95, "time": "2021-03-15T10:20:00", "tag": "b"},  # 同日、品質較高 → 留這個
+        {"day": "2021-04-20", "quality": 0.7, "time": "2021-04-20T09:00:00", "tag": "c"},   # 不同天 → 留
+        {"day": None, "quality": 0.5, "time": "", "tag": "d"},                              # 無時間戳 → 保留
+    ]
+    dd, n_rm = dedup_sameday(recs)
+    assert n_rm == 1 and len(dd) == 3
+    kept = {r["tag"] for r in dd}
+    assert kept == {"b", "c", "d"}, kept
+    print(f"  [OK] 同日重掃去重: 4→3（移除 {n_rm}，同日留品質高者 b、跨天 c 全留、無戳 d 保留）")
     print("[self-test OK]")
 
 
@@ -400,13 +470,17 @@ def main():
     ap.add_argument("--out", default="census_out", help="輸出目錄")
     a = ap.parse_args()
 
+    dedup_info = None
     if a.h5_dir:
-        trajectories = build_trajectories_from_h5(a.h5_dir, pilot=a.pilot)
+        trajectories, dedup_info = build_trajectories_from_h5(a.h5_dir, pilot=a.pilot)
     elif a.manifest:
         trajectories = build_trajectories_from_manifest(a.manifest, a.m7b_dir, a.treatment, pilot=a.pilot)
     else:
         _self_test(); return
-    write_reports(compute_census(trajectories), a.out)
+    census = compute_census(trajectories)
+    if dedup_info is not None:
+        census["dedup"] = dedup_info
+    write_reports(census, a.out)
 
 
 if __name__ == "__main__":
