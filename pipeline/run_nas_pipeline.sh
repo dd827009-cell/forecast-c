@@ -13,18 +13,20 @@ set -euo pipefail
 # ===================== 設定（只改這裡）=====================
 FTP_HOST="cad.csie.ntu.edu.tw"
 FTP_USER="d13945010"
-# 從 lftp `pwd` 貼上實際路徑（中文資料夾用實際名，不要 %A9%FA 那種編碼）：
-REMOTE_BASE="/eye2/請貼實際資料夾名/CGMHOCT_Heideberg/Patients-1"
+# 實際路徑（中文用 UTF-8 實名；伺服器是 Big5 → 下面 FTP_CHARSET 處理）：
+REMOTE_BASE="/eye2/202604明芝/CGMHOCT_Heideberg/Patients-1"
 EXCEL="/path/to/EYLEA 8mg 恩慈整理完成 (3).xlsx"   # 治療 Excel（含病歷號欄）
 SSD="/ssd/octdata"                                  # 本機 SSD 工作目錄（要有幾百 GB 空間）
 WORKERS=16
+FTP_CHARSET="big5"                                  # NAS 檔名編碼（CGMH 中文路徑用 Big5）
 # ==========================================================
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+LFTP_PRE="set ftp:charset $FTP_CHARSET; set file:charset utf-8; set net:connection-limit 4;"
 mkdir -p "$SSD"/{pdb_only,cohort_raw,h5_output}
 
 echo "===== [1/6] 只下載全部 .pdb（~3GB，保留資料夾結構）====="
-lftp -u "$FTP_USER" "$FTP_HOST" -e "set net:connection-limit 4; mirror -I '*.pdb' --parallel=4 --continue '$REMOTE_BASE' '$SSD/pdb_only'; bye"
+lftp -u "$FTP_USER" "$FTP_HOST" -e "$LFTP_PRE mirror -I '*.pdb' --parallel=4 --continue '$REMOTE_BASE' '$SSD/pdb_only'; bye"
 
 echo "===== [2/6] 掃 .pdb → 病歷號 index.csv ====="
 python "$REPO/pipeline/scan_pdb.py" --input "$SSD/pdb_only" --repo-root "$REPO" --workers "$WORKERS" --out "$SSD/index.csv"
@@ -37,7 +39,7 @@ python "$REPO/pipeline/filter_pats.py" --index "$SSD/index.csv" --cohort "$SSD/c
 
 echo "===== [5/6] 只下載 cohort 完整 .pat（含大 .sdb，可續跑）====="
 bash "$REPO/pipeline/download_cohort.sh" \
-    "$SSD/cohort_pats.txt" "$REMOTE_BASE" "$SSD/cohort_raw" "$FTP_HOST" "$FTP_USER" "$SSD/pdb_only"
+    "$SSD/cohort_pats.txt" "$REMOTE_BASE" "$SSD/cohort_raw" "$FTP_HOST" "$FTP_USER" "$SSD/pdb_only" "$FTP_CHARSET"
 
 echo "===== [6/6] 轉檔 cohort → h5（平行+冪等可續跑）====="
 ( cd "$REPO/pdb_to_h5" && python -m heyex_pipeline \

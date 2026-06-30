@@ -6,7 +6,8 @@
 #   bash download_cohort.sh <cohort_pats.txt> <REMOTE_BASE> <OUT目錄> <HOST> <USER> <PDB_ROOT>
 set -euo pipefail
 
-LIST="$1"; REMOTE_BASE="$2"; OUT="$3"; HOST="$4"; USER="$5"; PDB_ROOT="$6"
+LIST="$1"; REMOTE_BASE="$2"; OUT="$3"; HOST="$4"; USER="$5"; PDB_ROOT="$6"; CHARSET="${7:-big5}"
+LFTP_PRE="set ftp:charset $CHARSET; set file:charset utf-8; set net:connection-limit 4;"
 mkdir -p "$OUT"
 : > "$OUT/_failures.txt"
 
@@ -23,7 +24,7 @@ while IFS= read -r p; do
     fi
     echo "[$n/$n_total] 下載 $rel ..."
     mkdir -p "$dst"
-    if ! lftp -u "$USER" "$HOST" -e "set net:connection-limit 4; mirror --parallel=4 --continue '$REMOTE_BASE/$rel' '$dst'; bye"; then
+    if ! lftp -u "$USER" "$HOST" -e "$LFTP_PRE mirror --parallel=4 --continue '$REMOTE_BASE/$rel' '$dst'; bye"; then
         echo "$rel" >> "$OUT/_failures.txt"
         echo "  ⚠️ 失敗，記錄到 _failures.txt"
     fi
