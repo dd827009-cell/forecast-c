@@ -30,7 +30,7 @@ INC=""; [ -n "$GLOB" ] && INC="-I '$GLOB'"
 if [ "${ONESHOT:-0}" = "1" ] && [ -n "$GLOB" ]; then
   echo "[mirror_list] ONESHOT：單一連線鏡像整個 $BASE 的 $GLOB（一次登入、可續傳）..."
   timeout 86400 lftp "$HOST" -e "$PRE mirror $INC --continue \"$BASE\" \"$OUT\"; bye" || true
-  echo "[mirror_list] ONESHOT 完成：$OUT 現有 $(find "$OUT" -name "${GLOB#\*}" 2>/dev/null | wc -l) 個檔"
+  echo "[mirror_list] ONESHOT 完成：$OUT 現有 $(find "$OUT" -name "$GLOB" 2>/dev/null | wc -l) 個 $GLOB"
   exit 0
 fi
 
