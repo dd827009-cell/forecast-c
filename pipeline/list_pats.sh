@@ -22,7 +22,8 @@ fi
 PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset utf-8; \
 set net:timeout 30; set net:max-retries 1; set net:reconnect-interval-base 15; \
 set net:persist-retries 1; set cmd:interactive no;"
-if ! timeout 900 lftp -u "$USER" "$HOST" -e "$PRE cls -1 '$BASE/'; bye" > "$OUT.raw" 2>"$OUT.err"; then
+# 不帶 -u：讓 lftp 讀 ~/.netrc 取得帳號+密碼（-u 這種寫法在某些 lftp 不會讀 netrc → 會問密碼）。
+if ! timeout 900 lftp "$HOST" -e "$PRE cls -1 '$BASE/'; bye" > "$OUT.raw" 2>"$OUT.err"; then
   echo "[list_pats] ⚠️ 連線/列檔失敗或逾時，見 $OUT.err（重跑會再試）"; exit 1
 fi
 # 取 .pat：去尾斜線、去路徑只留 basename

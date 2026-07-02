@@ -26,6 +26,14 @@ set net:connection-limit 1; set net:timeout 25; set net:max-retries 1; \
 set net:reconnect-interval-base 15; set net:persist-retries 1; set cmd:interactive no; set xfer:clobber on;"
 INC=""; [ -n "$GLOB" ] && INC="-I '$GLOB'"
 
+# ONESHOT=1（僅 pdb 模式）：單一連線鏡像整個 base，一次登入、抓完才登出（對 max-tries 鎖最溫和）。
+if [ "${ONESHOT:-0}" = "1" ] && [ -n "$GLOB" ]; then
+  echo "[mirror_list] ONESHOT：單一連線鏡像整個 $BASE 的 $GLOB（一次登入、可續傳）..."
+  timeout 86400 lftp "$HOST" -e "$PRE mirror $INC --continue \"$BASE\" \"$OUT\"; bye" || true
+  echo "[mirror_list] ONESHOT 完成：$OUT 現有 $(find "$OUT" -name "${GLOB#\*}" 2>/dev/null | wc -l) 個檔"
+  exit 0
+fi
+
 # 1) 建 todo：跳過「已下載」的 .pat（pdb 模式已有 *.pdb、完整模式已有 *.sdb）。
 TODO="$WORK/_todo.txt"; : > "$TODO"
 total=0; skip=0
@@ -58,8 +66,8 @@ run_chunk() {
     s+="mirror $INC --continue \"$BASE/$pat\" \"$OUT/$pat\""$'\n'
   done < "$cf"
   s+="bye"$'\n'
-  # 每批最多 2 小時（整批卡死的保險；正常遠比這快）。net:timeout 已處理單點 stall。
-  timeout 7200 lftp -u "$USER" "$HOST" -e "$s" >/dev/null 2>&1 || true
+  # 不帶 -u：走 ~/.netrc。每批最多 2 小時保險；net:timeout 已處理單點 stall。
+  timeout 7200 lftp "$HOST" -e "$s" >/dev/null 2>&1 || true
 }
 export -f run_chunk
 

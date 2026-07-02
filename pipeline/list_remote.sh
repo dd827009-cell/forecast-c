@@ -31,7 +31,7 @@ PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset u
 
 echo "[list_remote] Phase A：列出 $BASE 底下的 .pat ..."
 CHILDREN="$OUT.children"
-if ! lftp -u "$USER" "$HOST" -e "$PRE cls -1 '$BASE/'; bye" > "$CHILDREN" 2>"$OUT.err"; then
+if ! lftp "$HOST" -e "$PRE cls -1 '$BASE/'; bye" > "$CHILDREN" 2>"$OUT.err"; then
   echo "[list_remote] ⚠️ 連線/列檔失敗，見 $OUT.err"; exit 1
 fi
 # 取出 .pat（去掉尾斜線、去路徑，只留 basename）；容大小寫
@@ -40,7 +40,7 @@ NPAT=$(grep -c . "$OUT.pats" || echo 0)
 
 if [ "$NPAT" -eq 0 ]; then
   echo "[list_remote] Phase A 沒找到直接的 .pat（結構較深）→ 退回單線 lftp find ..."
-  if lftp -u "$USER" "$HOST" -e "$PRE find '$BASE'; bye" > "$OUT.tmp" 2>>"$OUT.err"; then
+  if lftp "$HOST" -e "$PRE find '$BASE'; bye" > "$OUT.tmp" 2>>"$OUT.err"; then
     mv "$OUT.tmp" "$OUT"; echo "[list_remote] 完成（find）：$(wc -l < "$OUT") 行 → $OUT"; exit 0
   else
     echo "[list_remote] ⚠️ find 也失敗，見 $OUT.err"; rm -f "$OUT.tmp"; exit 1
@@ -58,7 +58,7 @@ list_one() {
   local key; key=$(printf '%s' "$pat" | md5sum | cut -c1-16)
   local f="$PARTS/$key"
   [ -s "$f" ] && return 0                                   # 續跑：已列過就跳
-  if lftp -u "$USER" "$HOST" -e "$PRE cls -1 '$BASE/$pat'; bye" > "$f.tmp" 2>/dev/null; then
+  if lftp "$HOST" -e "$PRE cls -1 '$BASE/$pat'; bye" > "$f.tmp" 2>/dev/null; then
     mv "$f.tmp" "$f"
   else
     rm -f "$f.tmp"                                          # 失敗不留半檔 → 下次重試

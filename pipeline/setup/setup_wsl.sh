@@ -45,8 +45,8 @@ echo "  repo   : $REPO"
 
 echo ""
 echo "===== [4/4] 測連線（列一個小資料夾，40 秒逾時，不會卡死）====="
-if timeout 40 lftp -u d13945010 cad.csie.ntu.edu.tw \
-     -e "set ssl:verify-certificate no; set net:timeout 15; set ftp:charset big5; set file:charset utf-8; cls '/eye2/eye4(cad5)/ike/HXD00002/'; bye" 2>/dev/null | head; then
+if timeout 40 lftp cad.csie.ntu.edu.tw \
+     -e "set ssl:verify-certificate no; set net:timeout 15; set net:max-retries 0; set ftp:charset big5; set file:charset utf-8; cls '/eye2/eye4(cad5)/ike/HXD00002/'; bye" 2>/dev/null | head; then
   echo "  ✓ 連線 OK。"
 else
   echo "  ⚠️ 沒印出檔名/逾時 → 檢查：① ~/.netrc 密碼對不對（ls -l ~/.netrc 要 -rw-------）；"
