@@ -48,13 +48,13 @@ def main():
     if not a.index and not a.listing:
         ap.error("至少要一份 --index 或 --listing")
 
-    # 以 (base, .pat basename) 為鍵 → 不同 base 同名資料夾不會互相蓋掉。
-    pats = {}  # (base,name) -> dict(base, folder, chart, n_sdb, n_pdb, n_files, has_counts)
+    # 以 .pat basename 為鍵
+    pats = {}  # name -> dict(base, folder, chart, n_sdb, n_pdb, n_files, has_counts)
 
-    def rec(label, name):
-        return pats.setdefault((label, name), {"base": label, "folder": "", "chart": "",
-                                               "n_sdb": 0, "n_pdb": 0, "n_files": 0,
-                                               "has_counts": False})
+    def rec(name):
+        return pats.setdefault(name, {"base": "", "folder": "", "chart": "",
+                                      "n_sdb": 0, "n_pdb": 0, "n_files": 0,
+                                      "has_counts": False})
 
     # 列檔（選用）→ 每 .pat 的 .sdb/.pdb/檔數
     for spec in a.listing:
@@ -70,7 +70,8 @@ def main():
                 if folder is None:
                     continue
                 name = os.path.basename(folder)
-                r = rec(label, name)
+                r = rec(name)
+                r["base"] = r["base"] or label
                 r["folder"] = r["folder"] or folder
                 r["has_counts"] = True
                 if line.endswith("/"):
@@ -93,7 +94,8 @@ def main():
                 if not pat_dir:
                     continue
                 name = os.path.basename(pat_dir)
-                r = rec(label, name)
+                r = rec(name)
+                r["base"] = r["base"] or label
                 r["folder"] = r["folder"] or pat_dir
                 chart = (row.get("chart_no") or "").strip()
                 if chart:
@@ -109,7 +111,7 @@ def main():
         print(f"  cohort {a.cohort}: {len(cohort)} 個病歷號")
 
     rows = []
-    for (_label, name), r in pats.items():
+    for name, r in pats.items():
         matched = ("yes" if r["chart"] in cohort else "no") if r["chart"] else ""
         n_sdb = r["n_sdb"] if r["has_counts"] else ""
         n_pdb = r["n_pdb"] if r["has_counts"] else ""
