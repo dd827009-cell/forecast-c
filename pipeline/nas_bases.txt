@@ -1,0 +1,16 @@
+# NAS 遠端基底路徑清單（給 run_all_paths.sh 逐一處理）。
+# 每行一個遠端絕對路徑；# 開頭與空行忽略。
+# 中文以 UTF-8 實名寫在這裡；lftp 端用 ftp:charset=big5 + file:charset=utf-8 轉成伺服器的 Big5。
+# （這些路徑由使用者 naspath.txt 的 Big5 百分比編碼解開而來，外加訊息裡的主路徑。）
+#
+# ── 主資料（99670 個 .pat，治療 cohort 主要來源）──
+/eye2/eye4(cad5)/ike/patients
+#
+# ── naspath.txt 其餘來源 ──
+/eye2/eye3(cad5)/oct
+/eye2/eye3(cad5)/hra
+/eye2/eye3(cad5)/土OCT/土20220414/patients
+/eye2/K_CGMH/HXD00002
+/eye2/eye4(cad5)/ike/HXD00002
+/eye2/202604明芝/CGMHOCT_Heideberg/Patients-1
+/eye2/202604明芝/CGMHOCT_Heideberg/Patients2
