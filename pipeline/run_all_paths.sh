@@ -37,9 +37,14 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$SSD"
 slug() { printf '%s' "$1" | sed 's#[^A-Za-z0-9._-]#_#g; s#__*#_#g; s#^_##; s#_$##'; }
 
-# base 清單（忽略 # 與空行）
-mapfile -t BASES < <(grep -vE '^\s*(#|$)' "$BASES_FILE")
-echo "===== 將處理 ${#BASES[@]} 個遠端 base ====="
+# base 清單：ONLY_BASE 環境變數若有設 → 只處理那一條（測試用）；否則讀 nas_bases.txt。
+if [ -n "${ONLY_BASE:-}" ]; then
+  BASES=("$ONLY_BASE")
+  echo "===== [ONLY_BASE] 只處理 1 個 base ====="
+else
+  mapfile -t BASES < <(grep -vE '^\s*(#|$)' "$BASES_FILE")
+  echo "===== 將處理 ${#BASES[@]} 個遠端 base ====="
+fi
 printf '  %s\n' "${BASES[@]}"
 
 # ---------- 階段 1（PHASE=all/pdb）：每 base 列 .pat → 下所有 .pdb → 解病歷號 → per-base log ----------
