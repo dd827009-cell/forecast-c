@@ -20,8 +20,8 @@ fi
 
 # 加逾時 + 自動重連/重試：cls 連線 stall 不會永遠卡死；timeout 900 = 最多等 15 分鐘。
 PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset utf-8; \
-set net:timeout 30; set net:max-retries 3; set net:reconnect-interval-base 5; \
-set net:persist-retries 3; set cmd:interactive no;"
+set net:timeout 30; set net:max-retries 1; set net:reconnect-interval-base 15; \
+set net:persist-retries 1; set cmd:interactive no;"
 if ! timeout 900 lftp -u "$USER" "$HOST" -e "$PRE cls -1 '$BASE/'; bye" > "$OUT.raw" 2>"$OUT.err"; then
   echo "[list_pats] ⚠️ 連線/列檔失敗或逾時，見 $OUT.err（重跑會再試）"; exit 1
 fi

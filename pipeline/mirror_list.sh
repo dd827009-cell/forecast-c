@@ -14,15 +14,16 @@
 set -uo pipefail
 
 LIST="${1:?給 REL_LIST}"; BASE="${2:?給 BASE}"; OUT="${3:?給 OUT}"
-HOST="${4:?給 HOST}"; USER="${5:?給 USER}"; GLOB="${6:-}"; PAR="${7:-3}"; CHARSET="${8:-big5}"; CHUNK="${9:-200}"
+HOST="${4:?給 HOST}"; USER="${5:?給 USER}"; GLOB="${6:-}"; PAR="${7:-2}"; CHARSET="${8:-big5}"; CHUNK="${9:-500}"
 BASE="${BASE%/}"
 mkdir -p "$OUT"
 WORK="$OUT/_chunks"; mkdir -p "$WORK"; rm -f "$WORK"/chunk_* 2>/dev/null || true
 
 # ⚠️ NAS 每 IP 上限 10 條連線 → 每條 lftp 連線 connection-limit 1；PAR 條並行 → 總連線 ≈ PAR。
+# 溫和：連線上限 1、少重試（避免登入風暴再度觸發 NAS 的 max-tries 鎖）、重連間隔拉長。
 PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset utf-8; \
-set net:connection-limit 1; set net:timeout 20; set net:max-retries 3; \
-set net:reconnect-interval-base 5; set net:persist-retries 3; set cmd:interactive no; set xfer:clobber on;"
+set net:connection-limit 1; set net:timeout 25; set net:max-retries 1; \
+set net:reconnect-interval-base 15; set net:persist-retries 1; set cmd:interactive no; set xfer:clobber on;"
 INC=""; [ -n "$GLOB" ] && INC="-I '$GLOB'"
 
 # 1) 建 todo：跳過「已下載」的 .pat（pdb 模式已有 *.pdb、完整模式已有 *.sdb）。
