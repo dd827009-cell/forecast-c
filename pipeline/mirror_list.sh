@@ -49,7 +49,7 @@ while IFS= read -r rel; do
   fi
   printf '%s\n' "$rel" >> "$TODO"
 done < "$LIST"
-n_todo=$(grep -c . "$TODO" 2>/dev/null || echo 0)
+n_todo=$(wc -l < "$TODO" 2>/dev/null || echo 0); n_todo=${n_todo//[^0-9]/}; n_todo=${n_todo:-0}
 echo "[mirror_list] 共 $total 個 .pat；已下載略過 $skip；這次要抓 $n_todo（glob='${GLOB:-全部}'，$PAR 條連線、每批 $CHUNK）"
 [ "$n_todo" -eq 0 ] && { echo "[mirror_list] 沒有要抓的，完成。"; exit 0; }
 
