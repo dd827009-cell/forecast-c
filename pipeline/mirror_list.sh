@@ -85,5 +85,5 @@ while IFS= read -r rel; do
     ls "$dst"/$GLOB >/dev/null 2>&1 || printf '%s\n' "$rel" >> "$FAIL"
   fi
 done < "$TODO"
-n_fail=$(grep -c . "$FAIL" 2>/dev/null || echo 0)
+n_fail=$(wc -l < "$FAIL" 2>/dev/null || echo 0); n_fail=${n_fail//[^0-9]/}; n_fail=${n_fail:-0}
 echo "[mirror_list] 完成：這批 $((n_todo - n_fail))/$n_todo 成功（失敗 $n_fail 見 $FAIL，重跑本指令續抓）"
