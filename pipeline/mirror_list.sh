@@ -22,8 +22,8 @@ WORK="$OUT/_chunks"; mkdir -p "$WORK"; rm -f "$WORK"/chunk_* 2>/dev/null || true
 # ⚠️ NAS 每 IP 上限 10 條連線 → 每條 lftp 連線 connection-limit 1；PAR 條並行 → 總連線 ≈ PAR。
 # 溫和：連線上限 1、少重試（避免登入風暴再度觸發 NAS 的 max-tries 鎖）、重連間隔拉長。
 PRE="set ssl:verify-certificate no; set ftp:charset $CHARSET; set file:charset utf-8; \
-set net:connection-limit 1; set net:timeout 25; set net:max-retries 1; \
-set net:reconnect-interval-base 15; set net:persist-retries 1; set cmd:interactive no; set xfer:clobber on;"
+set net:connection-limit 1; set net:timeout 25; set net:max-retries 5; \
+set net:reconnect-interval-base 10; set net:persist-retries 5; set cmd:interactive no; set xfer:clobber on;"
 INC=""; [ -n "$GLOB" ] && INC="-I '$GLOB'"
 
 # ONESHOT=1（僅 pdb 模式）：單一連線鏡像整個 base，一次登入、抓完才登出（對 max-tries 鎖最溫和）。
@@ -42,7 +42,8 @@ while IFS= read -r rel; do
   rel="${rel%/}"; total=$((total+1))
   dst="$OUT/$rel"
   if [ -z "$GLOB" ]; then
-    ls "$dst"/*.sdb >/dev/null 2>&1 && { skip=$((skip+1)); continue; }
+    # 完整模式：資料夾已有「任何檔案」＝已下載過 → 跳過（不同來源影像格式不一，不能只認 .sdb）
+    [ -d "$dst" ] && [ -n "$(find "$dst" -type f 2>/dev/null | head -1)" ] && { skip=$((skip+1)); continue; }
   elif ls "$dst"/$GLOB >/dev/null 2>&1; then
     skip=$((skip+1)); continue
   fi
@@ -78,7 +79,7 @@ FAIL="$OUT/_failures.txt"; : > "$FAIL"
 while IFS= read -r rel; do
   dst="$OUT/$rel"
   if [ -z "$GLOB" ]; then
-    ls "$dst"/*.sdb >/dev/null 2>&1 || printf '%s\n' "$rel" >> "$FAIL"
+    { [ -d "$dst" ] && [ -n "$(find "$dst" -type f 2>/dev/null | head -1)" ]; } || printf '%s\n' "$rel" >> "$FAIL"
   else
     ls "$dst"/$GLOB >/dev/null 2>&1 || printf '%s\n' "$rel" >> "$FAIL"
   fi
