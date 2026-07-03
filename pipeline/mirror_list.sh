@@ -60,13 +60,14 @@ split -l "$CHUNK" -d -a 5 "$TODO" "$WORK/chunk_"
 export OUT BASE HOST USER PRE INC GLOB
 run_chunk() {
   local cf="$1" s pat
-  s="$PRE"$'\n'
+  # ★ 用「分號單行」組指令（不能用換行！lftp -e 遇換行時 set 設定不會套到後面的 mirror → 只列目錄、下不到檔）
+  s="$PRE "
   while IFS= read -r pat; do
     [ -z "$pat" ] && continue
     mkdir -p "$OUT/$pat"
-    s+="mirror $INC --continue \"$BASE/$pat\" \"$OUT/$pat\""$'\n'
+    s+="mirror $INC --continue \"$BASE/$pat\" \"$OUT/$pat\"; "
   done < "$cf"
-  s+="bye"$'\n'
+  s+="bye"
   # 不帶 -u：走 ~/.netrc。每批最多 2 小時保險；net:timeout 已處理單點 stall。
   timeout 7200 lftp "$HOST" -e "$s" >/dev/null 2>&1 || true
 }
