@@ -1,9 +1,10 @@
 """HDF5 writer matching CLAUDE_TASK.md E.3 schema.
 
-One file per successful eye-visit. Output path layout:
+One file per successful eye-visit. Output path layout（一病歷號一資料夾）:
 
-    {out_root}/{h[:2]}/{h[2:4]}/{patient_id}/{visit_id}_{laterality}.h5
-    h = sha1(patient_id.encode()).hexdigest()
+    {out_root}/{patient_id}/{visit_id}_{laterality}.h5
+    patient_id = 病歷號（由來源 .pat 的 .pdb 解出）。同一病歷號（同病人跨多個 .pat）
+    自動併入同一資料夾；資料夾名即病歷號。
 
 Uses atomic write: writes to `{path}.partial`, then renames into place only
 after the file is fully closed. Crash mid-write leaves no half file behind.
@@ -11,7 +12,6 @@ after the file is fully closed. Crash mid-write leaves no half file behind.
 
 from __future__ import annotations
 
-import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,9 +85,8 @@ class HDF5Sample:
 
 
 def h5_relative_path(patient_id: str, visit_id: str, laterality: str) -> Path:
-    """Deterministic on-disk layout, relative to the output root."""
-    h = hashlib.sha1(patient_id.encode("utf-8")).hexdigest()
-    return Path(h[:2]) / h[2:4] / patient_id / f"{visit_id}_{laterality}{H5_SUFFIX}"
+    """一病歷號一資料夾: {patient_id}/{visit_id}_{laterality}.h5（無雜湊分片，資料夾名=病歷號）。"""
+    return Path(patient_id) / f"{visit_id}_{laterality}{H5_SUFFIX}"
 
 
 def write_sample(sample: HDF5Sample, out_root: str | os.PathLike) -> Path:
