@@ -11,6 +11,7 @@
 可訓練參數（predictor + treatment + thickness），encoder 凍結不進。
 """
 import argparse
+import os
 
 import torch
 
@@ -41,13 +42,14 @@ def step_fn(model, batch, device):
     if batch.get("treatment") is not None:
         treat = {k: v.to(device) for k, v in batch["treatment"].items()}
     out = model(g("v_t"), g("v_future"), treat, g("dt"), g("baseline"),
-                thickness_gt=g("thickness_gt"))
+                thickness_gt=g("thickness_gt"), thickness_mask=g("thickness_mask"))
     return out["loss"], out["detail"]
 
 
-def train_loop(model, loader, cfg, device, steps=None, lr=1e-4, log_every=1):
+def train_loop(model, loader, cfg, device, steps=None, lr=1e-4, log_every=10, opt=None):
     model.to(device)
-    opt = torch.optim.AdamW(trainable_params(model), lr=lr)
+    if opt is None:
+        opt = torch.optim.AdamW(trainable_params(model), lr=lr)
     model.train()
     step = 0
     for batch in loader:
@@ -68,6 +70,13 @@ def main():
     ap.add_argument("--steps", type=int, default=5)
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--latent-dir", help="預計算 latent 快取目錄（給定=用快取 latent 真訓練）")
+    ap.add_argument("--h5-dir", help="h5 目錄（配 --latent-dir）")
+    ap.add_argument("--epochs", type=int, default=1)
+    ap.add_argument("--all-pairs", action="store_true", help="all-pairs 配對（否則相鄰）")
+    ap.add_argument("--val-frac", type=float, default=0.2)
+    ap.add_argument("--num-workers", type=int, default=4)
+    ap.add_argument("--save", default="ckpts/phase2_min.pth")
     a = ap.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -81,11 +90,32 @@ def main():
         print("[smoke] 訓練迴圈跑通 ✅（★無 EMA、encoder 凍結）")
         return
 
-    # 真訓練（L40）
-    cfg = ForecastConfig()              # TODO(L40): 從 a.config 載
-    encoder = build_encoder(cfg)        # NotImplementedError until L40
+    # 真訓練（本機 4090，讀快取 latent）— 凍結 latent → predictor → 厚度頭（★無 EMA）
+    if a.latent_dir:
+        from forecast_c.model.encoder import IdentityEncoder
+        from forecast_c.data.paired_latent import build_paired_latent_loader
+        cfg = ForecastConfig()
+        model = build_model(cfg, IdentityEncoder())
+        loader = build_paired_latent_loader(cfg, a.latent_dir, a.h5_dir, split="train",
+                                            batch_size=a.batch_size, val_frac=a.val_frac,
+                                            all_pairs=a.all_pairs, num_workers=a.num_workers)
+        model.to(device)
+        opt = torch.optim.AdamW(trainable_params(model), lr=a.lr)
+        print(f"[train] device={device}  可訓練張量={len(trainable_params(model))}（encoder=Identity 凍結）")
+        limit = a.steps if a.steps and a.steps > 0 else None      # --steps 0 = 整個 epoch
+        for ep in range(a.epochs):
+            print(f"===== epoch {ep+1}/{a.epochs} =====")
+            train_loop(model, loader, cfg, device, steps=limit, lr=a.lr, opt=opt)
+        os.makedirs(os.path.dirname(a.save) or ".", exist_ok=True)
+        torch.save({"model": model.state_dict()}, a.save)
+        print(f"[train] 存檔 → {a.save}")
+        return
+
+    # L40 stub（沒給 --latent-dir 時）
+    cfg = ForecastConfig()
+    encoder = build_encoder(cfg)
     model = build_model(cfg, encoder)
-    loader = build_dataloader(cfg)      # NotImplementedError until L40
+    loader = build_dataloader(cfg)
     train_loop(model, loader, cfg, device, steps=a.steps, lr=a.lr)
 
 

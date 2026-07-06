@@ -76,6 +76,17 @@ class DummyEncoder(nn.Module):
         return tokens, tokens.mean(dim=1)
 
 
+class IdentityEncoder(nn.Module):
+    """餵預計算 latent 用：把輸入直接當 tokens 回傳（cls=None）。無參數、凍結。
+
+    快取 latent 已是 OCTCube encoder 的輸出 → 訓練時不再 encode，用此當 model.encoder。
+    輸入 x=(B,N,D) latent tokens → 回 (x, None)；model.encode_present/target 只取 tokens。
+    """
+
+    def forward(self, x):
+        return x, None
+
+
 def _octcube_remap(sd):
     """OCTCube.pth(flash 命名) → 非 flash st_joint 鍵。
 
