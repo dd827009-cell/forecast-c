@@ -12,6 +12,7 @@ import random
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import h5py
 from torch.utils.data import Dataset, DataLoader
 
@@ -86,8 +87,9 @@ def split_pairs(pairs, val_frac=0.2, seed=0):
 
 
 class PairedLatentDataset(Dataset):
-    def __init__(self, pairs):
+    def __init__(self, pairs, out_h=25, out_w=512):
         self.pairs = pairs
+        self.out_h, self.out_w = out_h, out_w
 
     def __len__(self):
         return len(self.pairs)
@@ -99,7 +101,12 @@ class PairedLatentDataset(Dataset):
         tt, tf = _parse_t(vt["time"]), _parse_t(vf["time"])
         dt = ((tf - tt).days / 365.25) if (tt and tf) else 0.0
         c = _cst(vt["h5"]); c = c if (c == c) else 300.0
-        th, mask = _thickness_gt(vf["h5"])                                    # 未來厚度 (25,512)
+        th, mask = _thickness_gt(vf["h5"])                                    # (nb, W) 掃描寬度不一
+        # resize 到固定 (out_h, out_w) → 不同掃描寬度(512/768…)才 stack 得起來
+        th = F.interpolate(th[None, None].float(), size=(self.out_h, self.out_w),
+                           mode="bilinear", align_corners=False)[0, 0]
+        mask = F.interpolate(mask[None, None].float(), size=(self.out_h, self.out_w),
+                             mode="nearest")[0, 0] > 0.5
         return {"v_t": zt, "v_future": zf,
                 "dt": torch.tensor(float(dt), dtype=torch.float32),
                 "baseline": torch.tensor(float((c - 300.0) / 100.0), dtype=torch.float32),
@@ -121,7 +128,7 @@ def build_paired_latent_loader(cfg, latent_dir, h5_dir, split="train", batch_siz
     sel = train if split == "train" else val
     print(f"[paired_latent] {split}: {len(sel)} 對（train {len(train)}/val {len(val)}；眼組 {len(groups)}；"
           f"all_pairs={all_pairs}）")
-    ds = PairedLatentDataset(sel)
+    ds = PairedLatentDataset(sel, out_h=cfg.thickness.out_h, out_w=cfg.thickness.out_w)
     return DataLoader(ds, batch_size=batch_size, shuffle=(split == "train"),
                       collate_fn=collate_latent, num_workers=num_workers,
                       drop_last=(split == "train"))

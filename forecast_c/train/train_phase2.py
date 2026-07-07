@@ -56,7 +56,7 @@ def train_loop(model, loader, cfg, device, steps=None, lr=1e-4, log_every=10, op
         loss, detail = step_fn(model, batch, device)
         opt.zero_grad(); loss.backward(); opt.step()
         if step % log_every == 0:
-            print(f"  step {step:4d}  loss={float(loss):.4f}  {detail}")
+            print(f"  step {step:4d}  loss={float(loss.detach()):.4f}  {detail}")
         step += 1
         if steps and step >= steps:
             break
