@@ -33,6 +33,7 @@
   # 2) 擬合 probe（輕，只吃快取，可反覆調）
   python -m forecast_c.train.probe_semantics --stage probe \
       --cache probe_out/semantics_probe_cache --folds 5 --probe both
+  # 若 PCV/RAP 太少：加 --binary 退成 nAMD vs rest（快取不用重抽）
 """
 import argparse
 import glob
@@ -324,10 +325,16 @@ def probe(args):
     data = [np.load(f, allow_pickle=True) for f in files]
     y = np.array([int(d["label"]) for d in data])
     pids = [str(d["pid"]) for d in data]
-    n_cls = len(CLASS_NAMES)
+    # binary 退路：稀有的 PCV/RAP 合併成 rest，穩定指標（快取仍是 3 類，這裡只是 probe 時壓縮）
+    if args.binary:
+        y = (y != 0).astype(np.int64)                       # nAMD=0 → 0；PCV/RAP → 1
+        class_names = ["nAMD", "rest(PCV+RAP)"]
+    else:
+        class_names = CLASS_NAMES
+    n_cls = len(class_names)
     kinds = ["linear", "mlp"] if args.probe == "both" else [args.probe]
 
-    print(f"\n樣本={len(y)}  病人={len(set(pids))}  類別(nAMD/PCV/RAP)="
+    print(f"\n樣本={len(y)}  病人={len(set(pids))}  類別({'/'.join(class_names)})="
           f"{np.bincount(y, minlength=n_cls).tolist()}  folds={args.folds}\n")
     header = f"{'feature':<12}{'probe':<8}{'dim':>5}  {'macroF1':>8}{'bAcc':>8}{'ovrAUC':>8}"
     print(header + "   (mean±std over folds)")
@@ -396,6 +403,8 @@ def main():
     # shared / probe
     ap.add_argument("--cache", default="probe_out/semantics_probe_cache")
     ap.add_argument("--probe", choices=["linear", "mlp", "both"], default="both")
+    ap.add_argument("--binary", action="store_true",
+                    help="退路：三分類→nAMD vs rest(PCV+RAP)，PCV/RAP 太少時穩定指標")
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=300)
     ap.add_argument("--seed", type=int, default=0)
