@@ -245,13 +245,17 @@ def probe(args):
     if not rows:
         print("⚠️ 無可用配對 → 先跑 --stage extract")
         return
+    _run(rows, drug_cov, args.folds, args.alpha, args.seed)
+
+
+def _run(rows, drug_cov, folds_k, alpha, seed):
     pids = [r["pid"] for r in rows]
     y = np.array([r["dcst"] for r in rows], dtype=np.float64)
     cov = np.array([[r["dt"], r["base"]] for r in rows], dtype=np.float64)
     if drug_cov is not None:
         cov = np.hstack([cov, np.stack([r["drug"] for r in rows])])
     print(f"\n配對={len(y)}  病人={len(set(pids))}  ΔCST µm: mean={y.mean():.1f} std={y.std():.1f} "
-          f"|Δ|mean={np.abs(y).mean():.1f}  folds={args.folds}\n")
+          f"|Δ|mean={np.abs(y).mean():.1f}  folds={folds_k}\n")
 
     # 要比較的輸入組（都串共變數）
     sets = {"cov-only": None, "b0(z_thickness)": "b0_latent", "b0_level3": "b0_level3"}
@@ -266,7 +270,7 @@ def probe(args):
         parts = [np.stack([r[k] for r in rows]) for k in keys]
         return np.hstack(parts + [cov])
 
-    folds = _group_kfold(pids, args.folds, seed=args.seed)
+    folds = _group_kfold(pids, folds_k, seed=seed)
     # persistence 參考（預測 ΔCST=0）
     pers_mae = float(np.mean([_mae(y[te], np.zeros(len(te))) for _, te in folds]))
     print(f"{'input':<24}{'dim':>5}  {'R2':>14}{'MAE(µm)':>14}")
@@ -278,7 +282,7 @@ def probe(args):
         X = _mat(key)
         r2s, maes = [], []
         for tr, te in folds:
-            yh = _fit_predict(X[tr], y[tr], X[te], args.alpha)
+            yh = _fit_predict(X[tr], y[tr], X[te], alpha)
             r2s.append(_r2(y[te], yh))
             maes.append(_mae(y[te], yh))
         r2m, r2s_ = float(np.mean(r2s)), float(np.std(r2s))
@@ -307,12 +311,41 @@ def probe(args):
     print(f"Q_value：oct 最佳 {oct_r2[best_blk]:.3f} − b0 {b0_r2:.3f} = {gap:+.3f} → {v}")
     if comb_r2 > max(b0_r2, oct_r2[best_blk]) + 0.01:
         print(f"合併 R²={comb_r2:.3f} > 各自 → 互補，fusion(z_visit) 站得住")
+    return results
+
+
+def _selftest():
+    """假造特徵+CST 驗證 probe 階段數學（ridge/R²/MAE/GroupKFold/判讀），不需資料/權重。
+
+    設計：藏一個潛在疾病活動因子 z 驅動 ΔCST；oct_b18 乾淨讀出 z、b0 noisy 讀出、其餘純噪音。
+    預期：cov-only≈0、oct_b18 R² 明顯 > b0 > cov，判讀=語意有加值。
+    """
+    rng = np.random.RandomState(0)
+    n, P, sig = 240, 60, 8
+    rows = []
+    for i in range(n):
+        z = rng.randn()
+        b0 = rng.randn(128).astype(np.float32); b0[:sig] = z + rng.randn(sig) * 1.5   # noisy
+        o18 = rng.randn(1024).astype(np.float32); o18[:sig] = z + rng.randn(sig) * 0.1  # clean
+        row = {"dcst": 20.0 * z + rng.randn() * 8, "base": 300 + rng.randn() * 40,
+               "dt": abs(rng.randn()) * 0.3 + 0.1, "pid": f"P{i % P}",
+               "b0_latent": b0, "b0_level3": rng.randn(64).astype(np.float32), "oct_b18": o18}
+        for blk in REQUESTED_BLOCKS:
+            if blk != 18:
+                row[f"oct_b{blk}"] = rng.randn(1024).astype(np.float32)                # 噪音
+        rows.append(row)
+    print(f"── selftest：假造 {n} 配對 / {P} 病人（oct_b18 藏訊號、b0 弱、其餘噪音）──")
+    res = _run(rows, None, folds_k=5, alpha=10.0, seed=0)
+    cov, b0r2, o18 = res["cov-only"][0], res["b0(z_thickness)"][0], res["oct_b18"][0]
+    assert o18 > b0r2 > cov, f"selftest 異常: cov={cov:.3f} b0={b0r2:.3f} oct18={o18:.3f}"
+    print(f"\n✅ selftest 通過：oct_b18({o18:.3f}) > b0({b0r2:.3f}) > cov-only({cov:.3f}) → probe 數學正確")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Step 0 反應 probe（ΔCST 回歸，gate A/B/C）")
     ap.add_argument("--stage", choices=["extract", "probe", "both"], default="both")
-    ap.add_argument("--h5-dir", required=True)
+    ap.add_argument("--selftest", action="store_true", help="假資料驗 probe 數學(不需資料/權重)")
+    ap.add_argument("--h5-dir")
     ap.add_argument("--case-pooling", default=None, help="給了就把藥種多熱當共變數（可選）")
     ap.add_argument("--b0-ckpt", default="probe_out/anisotropic_native_sqrtpct_seed43/best.pt")
     ap.add_argument("--b0-base-channels", type=int, default=16)
@@ -326,6 +359,10 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
 
+    if a.selftest:
+        _selftest()
+        return
+    assert a.h5_dir, "需要 --h5-dir（或用 --selftest 只驗數學）"
     if a.stage in ("extract", "both"):
         extract(a)
     if a.stage in ("probe", "both"):
